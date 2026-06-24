@@ -34,6 +34,16 @@ data_io/
 └── sample_tokenized.py       # Stratified sampling & epoch creation
 ```
 
+## Local modifications (this fork)
+
+> ⚠️ This is a local deviation from upstream `sapientinc` sampling behaviour — a **Major Change** in the sense of the Contributions section below (it alters the token distribution).
+
+**FLAN translation removed.** The FLAN `wmt16_translate_*` tasks (7 task files, ~6.2B tokens ≈ 32% of FLAN) are removed from the tokenized sampling pool. Rationale: translation (de/fi/cs↔en) teaches nothing for the English reasoning/knowledge benchmarks we target (MMLU / ARC / BoolQ / GSM8K / MATH), and it was the single largest low-value block in the mix. Removing it frees that budget for the benchmark-relevant non-translation FLAN (MCQA / QA / NLI / reading-comprehension).
+
+- **How:** `./remove_flan_translation.sh` moves the matching tokenized dirs out of the pool root (idempotent; `--restore` to undo). Re-run it after any incremental re-tokenize, since the cleaned source still contains those tasks.
+- **Paired config change:** in `prefix_config.yaml` the `flan__` cap is raised `5_000 → 15_000` to keep more of the remaining FLAN.
+- **Re-sample after applying:** `python sample_tokenized.py prefix_config_path=prefix_config.yaml epochs=<N> output_path=<dir>` and read the per-category token report it prints.
+
 ## Guidelines
 
 Before you start, please make sure that you are in the project directory and have installed pip requirements:

@@ -3,6 +3,7 @@ from typing import Literal, Optional, Sequence, Any
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+import os
 import yaml
 
 from tqdm import tqdm
@@ -24,6 +25,7 @@ class Config(pydantic.BaseModel):
     tokenized_path: str = "data_tokenized_bpe_65k"
     output_path: str = "/dev/shm/sampled"
     prefix_config_path: str = "prefix_config.yaml"
+    reuse_tokens_npy: str = ""  # hardlink this existing pool instead of re-copying ~127GB
 
     seed: int = 0
     epochs: int = 10
@@ -95,6 +97,21 @@ def concat_tokens(tasks: list[Task], config: Config, tokenizer_info: dict[str, A
         task.mmap_base_offset = total_tokens
         task.mmap_length = task_len
         total_tokens += task_len
+
+    # Reuse an existing identical pool. The offsets above depend only on the sorted task order and
+    # unfiltered per-task lengths (config-independent), so a pool built from the same tokenized_path
+    # has the identical layout -> hardlink it (0 bytes) instead of re-copying ~127GB. The size assert
+    # refuses if the totals differ (i.e. layouts could diverge).
+    if config.reuse_tokens_npy:
+        Path(config.output_path).mkdir(parents=True, exist_ok=True)
+        existing = np.load(config.reuse_tokens_npy, mmap_mode="r")
+        assert existing.shape == (total_tokens,), (
+            f"reuse pool has {existing.shape[0]} tokens != computed {total_tokens}; refusing to reuse")
+        dst = Path(config.output_path) / "tokens.npy"
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+        os.link(config.reuse_tokens_npy, dst)
+        return
 
     # Create a big mmap of concatenated tokens with dynamic dtype
     target_dtype = np.int32  # Defaults to int32

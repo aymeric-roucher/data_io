@@ -5,9 +5,13 @@
   max_per_file: 20_000
 
 # FLAN
+# NOTE (local mod): the FLAN translation (wmt16_translate_*) tasks are removed from
+# the tokenized pool by remove_flan_translation.sh (~32% of FLAN, near-useless for
+# English reasoning/knowledge). Cap raised 5k->15k to keep more of the remaining
+# benchmark-relevant FLAN (MCQA / QA / NLI / reading-comprehension).
 - prefix: "flan__cot_"
 - prefix: "flan__"
-  max_per_file: 5_000
+  max_per_file: 15_000
 
 # Other clustered datasets
 - prefix: "dmmath__"
@@ -24,6 +28,12 @@
   max_per_file: 500_000
 - prefix: "sudoku_extreme__"
   max_per_file: 1_000_000
+
+# Added math (local) — clean_orca_math.py / clean_big_math.py
+- prefix: "orca_math"
+  max_per_file: 200_000   # ~full; easy/GSM8k-level worked solutions — do NOT upsample (easy + overlaps openmathinstruct2)
+- prefix: "big_math"
+  max_per_file: 251_122   # ~full; HARD (median solve-rate 0.44), answer-only "direct" — do NOT repeat (answer-only → memorization)
 
 # Repeat small HQ datasets
 - prefix: "Platypus__"
