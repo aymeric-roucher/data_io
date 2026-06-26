@@ -4,11 +4,11 @@ Scales every max_per_file by f = TARGET/estimated_faithful_total (keeping >= 1),
 leaves `repeat` (the x10 HQ upsampling) and prefix order untouched so relative
 proportions are preserved. Writes a YAML compatible with sample_tokenized.py.
 """
-import sys, yaml, json, math
+import os, sys, yaml, json, math
 from pathlib import Path
 
-FAITHFUL = Path("/root/data_io/prefix_config.yaml")
-TARGET = 2_000_000_000
+FAITHFUL = Path(os.environ.get("DATA_PREFIX_CONFIG", "/root/data_io/prefix_config.yaml"))
+TARGET = int(float(os.environ.get("DATA_MIX_TARGET", 2_000_000_000)))
 
 def main():
     f = float(sys.argv[1])          # scale factor applied to every max_per_file

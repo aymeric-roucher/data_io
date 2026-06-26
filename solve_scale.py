@@ -9,15 +9,18 @@ We can't keep the EXACT paper proportions and hit 2B, because the fixed/pool-lim
 exceed or approach 2B. Best we can do: scale the binding caps to bring total to TARGET, accepting that
 the uncapped/pool-limited tail is whatever the pool holds. We binary-search f over the real estimator.
 """
-import sys, yaml, json
+import os, sys, yaml, json
 from pathlib import Path
 import numpy as np
 
-TOK_PATH = Path("/scratch/data_io_run/data_tokenized_bpe_65k")
-FAITHFUL = Path("/root/data_io/prefix_config.yaml")
+# Env-configurable so the same solver serves the 2B faithful mix AND a scaled-up target
+# (e.g. DATA_MIX_TARGET=25e9 for the 25B mixture). f is no longer restricted to [0,1]:
+# to exceed the faithful full total we scale binding caps UP (f>1) until pools run dry.
+TOK_PATH = Path(os.environ.get("DATA_TOK_PATH", "/scratch/data_io_run/data_tokenized_bpe_65k"))
+FAITHFUL = Path(os.environ.get("DATA_PREFIX_CONFIG", "/root/data_io/prefix_config.yaml"))
 CONTEXT_SIZE = 4096 + 1
 MIN_RESP = 2
-TARGET = 2_000_000_000
+TARGET = int(float(os.environ.get("DATA_MIX_TARGET", 2_000_000_000)))
 
 def match_prefix(task_name, cfg_list):
     chosen = None
@@ -68,14 +71,27 @@ def main():
     # Report the floor (f -> 0: every capped task = 1 row * repeat; uncapped/repeat = full)
     floor = total_for_f(tasks, cfg, 1e-9)
     full = total_for_f(tasks, cfg, 1.0)
+    ceil = total_for_f(tasks, cfg, 1e12)  # every cap >= pool size -> whole (filtered) pool * repeat
     print(f"floor (f->0, caps=1 row): {floor:,.0f}")
     print(f"full  (f=1, faithful):    {full:,.0f}")
+    print(f"ceil  (f->inf, caps off): {ceil:,.0f}")
     print(f"TARGET:                   {TARGET:,}")
     if floor > TARGET:
-        print("!! Floor already exceeds TARGET: cannot reach 2B by scaling caps alone.")
-    # binary search f in [0, 1]
+        print("!! Floor already exceeds TARGET: cannot go below it by scaling caps down.")
+    if ceil < TARGET:
+        # Pool is exhausted before TARGET: best achievable is the whole pool (f -> inf).
+        print(f"!! Pool ceiling {ceil:,.0f} < TARGET {TARGET:,}: returning max f (whole pool).")
+        f = 1e12
+        print(f"\nsolved f = {f:.6f} -> total = {ceil:,.0f}")
+        print(f"SOLVED_F={f:.6f}")
+        print(f"SOLVED_TOTAL={int(ceil)}")
+        return
+    # total_for_f is monotonic non-decreasing in f. Bracket TARGET (hi grows past 1 for f>1),
+    # then binary search. Works for both down-scaling (f<1) and up-scaling (f>1).
     lo, hi = 0.0, 1.0
-    for _ in range(60):
+    while total_for_f(tasks, cfg, hi) < TARGET:
+        hi *= 2
+    for _ in range(80):
         mid = (lo + hi) / 2
         t = total_for_f(tasks, cfg, mid)
         if t > TARGET:
@@ -83,7 +99,10 @@ def main():
         else:
             lo = mid
     f = (lo + hi) / 2
-    print(f"\nsolved f = {f:.6f} -> total = {total_for_f(tasks, cfg, f):,.0f}")
+    total = total_for_f(tasks, cfg, f)
+    print(f"\nsolved f = {f:.6f} -> total = {total:,.0f}")
+    print(f"SOLVED_F={f:.6f}")          # parseable by build_hrm_dataset.sh
+    print(f"SOLVED_TOTAL={int(total)}")
 
 if __name__ == "__main__":
     main()
