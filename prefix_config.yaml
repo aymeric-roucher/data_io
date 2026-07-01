@@ -29,11 +29,12 @@
 - prefix: "sudoku_extreme__"
   max_per_file: 1_000_000
 
-# Added math (local) — clean_orca_math.py / clean_big_math.py
+# Added math (local) — clean_orca_math.py (worked solutions / CoT).
+# Big-Math (clean_big_math.py) is intentionally NOT included: it is HARD, answer-only ("direct"),
+# which under our response-only objective on a small from-scratch model is unlearnable scaffold-free
+# -> memorization, and teaches ~no generative language. See RecursiveModel/README.md "Datamix".
 - prefix: "orca_math"
   max_per_file: 200_000   # ~full; easy/GSM8k-level worked solutions — do NOT upsample (easy + overlaps openmathinstruct2)
-- prefix: "big_math"
-  max_per_file: 251_122   # ~full; HARD (median solve-rate 0.44), answer-only "direct" — do NOT repeat (answer-only → memorization)
 
 # Repeat small HQ datasets
 - prefix: "Platypus__"
